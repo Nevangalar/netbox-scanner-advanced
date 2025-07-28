@@ -13,20 +13,16 @@ class Nmap(object):
         for item in self.networks:
             temp_scan_result = nmap.nmap_no_portscan(item.replace('\n', ''), args="-R --system-dns")
             self.scan_results = {**self.scan_results, **temp_scan_result}
-            self.scan_results.pop("stats")
-            self.scan_results.pop("runtime")
+            self.scan_results.pop("stats", None)
+            self.scan_results.pop("runtime", None)
         return self.scan_results
 
     def run(self):
-        self.scan()
-        for k,v in self.scan().items():
+        scan_results = self.scan()
+        for k, v in scan_results.items():
             try:
-                self.hosts.append((
-                    k,
-                    v['hostname'][0]['name']
-                ))
+                hostname = v['hostname'][0]['name'] if v['hostname'] else self.unknown
+                mac = v['macaddress'] if 'macaddress' in v else None
+                self.hosts.append((k, hostname, mac))
             except (IndexError, KeyError):
-                self.hosts.append((
-                    k,
-                    self.unknown
-                ))
+                self.hosts.append((k, self.unknown, None))

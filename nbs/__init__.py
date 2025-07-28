@@ -42,7 +42,7 @@ class NetBoxScanner(object):
     def sync_host(self, host):
         '''Syncs a single host to NetBox
 
-        host: a tuple like ('10.0.0.1','Gateway')
+        host: a tuple like ('10.0.0.1', 'Gateway', '00:11:22:33:44:55')
         returns: True if syncing is good or False for errors
         '''
         try:
@@ -55,32 +55,32 @@ class NetBoxScanner(object):
 
         if nbhost:
             tag_update = False
-            for tag in nbhost.tags:
-                if (self.tag == tag.name):
-                    tag_update = True
-                    break
+            custom_fields = {} if nbhost.custom_fields is None else nbhost.custom_fields
+            if custom_fields.get('nmap_dns') != host[1]:
+                custom_fields['nmap_dns'] = host[1]
+                tag_update = True
+            if custom_fields.get('nmap_mac') != host[2]:
+                custom_fields['nmap_mac'] = host[2]
+                tag_update = True
+
             if tag_update:
-                if (host[1] != nbhost.description):
-                    aux = nbhost.description
-                    nbhost.description = host[1]
-                    nbhost.save()
-                    logging.info(
-                        f'updated: {host[0]}/32 "{aux}" -> "{host[1]}"')
-                    self.stats['updated'] += 1
-                else:
-                    logging.info(f'unchanged: {host[0]}/32 "{host[1]}"')
-                    self.stats['unchanged'] += 1
+                nbhost.custom_fields = custom_fields
+                nbhost.save()
+                logging.info(f'updated: {host[0]}/32 "{host[1]}" with MAC {host[2]}')
+                self.stats['updated'] += 1
             else:
-                logging.info(f'no-tag(unchanged): {host[0]}/32 "{host[1]}"')
                 self.stats['unchanged'] += 1
         else:
             self.netbox.ipam.ip_addresses.create(
                 address=host[0],
                 tags=[{"name": self.tag}],
-                # dns_name=host[1],
-                description=host[1]
+                description=host[1],
+                custom_fields={
+                    'nmap_dns': host[1],
+                    'nmap_mac': host[2]
+                }
             )
-            logging.info(f'created: {host[0]}/32 "{host[1]}"')
+            logging.info(f'created: {host[0]}/32 "{host[1]}" with MAC {host[2]}')
             self.stats['created'] += 1
 
         return True
@@ -96,8 +96,9 @@ class NetBoxScanner(object):
                 self.stats['deleted'] += 1
 
     def sync(self, hosts):
-        '''Syncs hosts to NetBox
-        hosts: list of tuples like [(addr,description),...]
+        '''Syncs a list of hosts to NetBox
+        :param
+            hosts: list of tuples like [(addr, description, mac_address), ...]
         '''
         for s in self.stats:
             self.stats[s] = 0
